@@ -1,68 +1,46 @@
-## STEP 0: load required packages
+setwd("~/datascience/3. Obtaining Data/Project/")
+training = read.csv("UCI HAR Dataset/train/X_train.txt", sep="", header=FALSE)
+training[,562] = read.csv("UCI HAR Dataset/train/Y_train.txt", sep="", header=FALSE)
+training[,563] = read.csv("UCI HAR Dataset/train/subject_train.txt", sep="", header=FALSE)
 
-# load the reshape2 package (will be used in STEP 5)
-library(reshape2)
+testing = read.csv("UCI HAR Dataset/test/X_test.txt", sep="", header=FALSE)
+testing[,562] = read.csv("UCI HAR Dataset/test/Y_test.txt", sep="", header=FALSE)
+testing[,563] = read.csv("UCI HAR Dataset/test/subject_test.txt", sep="", header=FALSE)
 
+activityLabels = read.csv("UCI HAR Dataset/activity_labels.txt", sep="", header=FALSE)
 
-## STEP 1: Merges the training and the test sets to create one data set
+# Read features and make the feature names better suited for R with some substitutions
+features = read.csv("UCI HAR Dataset/features.txt", sep="", header=FALSE)
+features[,2] = gsub('-mean', 'Mean', features[,2])
+features[,2] = gsub('-std', 'Std', features[,2])
+features[,2] = gsub('[-()]', '', features[,2])
 
-# read data into data frames
-subject_train <- read.table("subject_train.txt")
-subject_test <- read.table("subject_test.txt")
-X_train <- read.table("X_train.txt")
-X_test <- read.table("X_test.txt")
-y_train <- read.table("y_train.txt")
-y_test <- read.table("y_test.txt")
+# Merge training and test sets together
+allData = rbind(training, testing)
 
-# add column name for subject files
-names(subject_train) <- "subjectID"
-names(subject_test) <- "subjectID"
+# Get only the data on mean and std. dev.
+colsWeWant <- grep(".*Mean.*|.*Std.*", features[,2])
+# First reduce the features table to what we want
+features <- features[colsWeWant,]
+# Now add the last two columns (subject and activity)
+colsWeWant <- c(colsWeWant, 562, 563)
+# And remove the unwanted columns from allData
+allData <- allData[,colsWeWant]
+# Add the column names (features) to allData
+colnames(allData) <- c(features$V2, "Activity", "Subject")
+colnames(allData) <- tolower(colnames(allData))
 
-# add column names for measurement files
-featureNames <- read.table("features.txt")
-names(X_train) <- featureNames$V2
-names(X_test) <- featureNames$V2
+currentActivity = 1
+for (currentActivityLabel in activityLabels$V2) {
+  allData$activity <- gsub(currentActivity, currentActivityLabel, allData$activity)
+  currentActivity <- currentActivity + 1
+}
 
-# add column name for label files
-names(y_train) <- "activity"
-names(y_test) <- "activity"
+allData$activity <- as.factor(allData$activity)
+allData$subject <- as.factor(allData$subject)
 
-# combine files into one dataset
-train <- cbind(subject_train, y_train, X_train)
-test <- cbind(subject_test, y_test, X_test)
-combined <- rbind(train, test)
-
-
-## STEP 2: Extracts only the measurements on the mean and standard
-## deviation for each measurement.
-
-# determine which columns contain "mean()" or "std()"
-meanstdcols <- grepl("mean\\(\\)", names(combined)) |
-    grepl("std\\(\\)", names(combined))
-
-# ensure that we also keep the subjectID and activity columns
-meanstdcols[1:2] <- TRUE
-
-# remove unnecessary columns
-combined <- combined[, meanstdcols]
-
-
-## STEP 3: Uses descriptive activity names to name the activities
-## in the data set.
-## STEP 4: Appropriately labels the data set with descriptive
-## activity names. 
-
-# convert the activity column from integer to factor
-combined$activity <- factor(combined$activity, labels=c("Walking",
-    "Walking Upstairs", "Walking Downstairs", "Sitting", "Standing", "Laying"))
-
-
-## STEP 5: Creates a second, independent tidy data set with the
-## average of each variable for each activity and each subject.
-
-# create the tidy data set
-melted <- melt(combined, id=c("subjectID","activity"))
-tidy <- dcast(melted, subjectID+activity ~ variable, mean)
-
-# write the tidy data set to a file
-write.csv(tidy, "tidy.csv", row.names=FALSE)
+tidy = aggregate(allData, by=list(activity = allData$activity, subject=allData$subject), mean)
+# Remove the subject and activity column, since a mean of those has no use
+tidy[,90] = NULL
+tidy[,89] = NULL
+write.table(tidy, "tidy.txt", sep="\t")
